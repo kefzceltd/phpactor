@@ -7,14 +7,12 @@ echo "\n"
 mkdir workspace
 cd workspace
 
-echo "# Cloning Symfony\n"
-git clone https://github.com/symfony/symfony
+echo "# Cloning and installing Symfony"
+composer create-project symfony/symfony
 cd symfony
-echo "# Installing Symfony Dependencies\n"
-composer install
 
-echo "# Searching for a class\n"
+echo "# Searching for a class"
 ../../bin/phpactor class:search "Request"
 
-echo "# Finding method references\n"
+echo "# Finding method references"
 ../../bin/phpactor references:method "Symfony\\Component\\Filesystem\\Filesystem"
