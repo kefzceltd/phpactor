@@ -16,6 +16,9 @@ use Phpactor\WorseReflection\Core\SourceCode;
 use Symfony\Component\Yaml\Exception\RuntimeException;
 use Phpactor\Application\ClassMethodReferences;
 use Phpactor\WorseReflection\Core\Logger\ArrayLogger;
+use Phpactor\Rpc\Editor\InputCallbackAction;
+use Phpactor\Filesystem\Domain\FilesystemRegistry;
+use Phpactor\Rpc\Editor\Input\ChoiceInput;
 
 class ReferencesHandlerTest extends HandlerTestCase
 {
@@ -34,12 +37,21 @@ class ReferencesHandlerTest extends HandlerTestCase
      */
     private $classMethodReferences;
 
+    /**
+     * @var ArrayLogger
+     */
     private $logger;
+
+    /**
+     * @var FilesystemRegistry
+     */
+    private $filesystemRegistry;
 
     public function setUp()
     {
         $this->classReferences = $this->prophesize(ClassReferences::class);
         $this->classMethodReferences = $this->prophesize(ClassMethodReferences::class);
+        $this->filesystemRegistry = $this->prophesize(FilesystemRegistry::class);
         $this->logger = new ArrayLogger();
         $this->reflector = Reflector::create(new StringSourceLocator(SourceCode::fromPath(__FILE__)), $this->logger);
     }
@@ -53,7 +65,8 @@ class ReferencesHandlerTest extends HandlerTestCase
         return new ReferencesHandler(
             $this->reflector,
             $this->classReferences->reveal(),
-            $this->classMethodReferences->reveal()
+            $this->classMethodReferences->reveal(),
+            $this->filesystemRegistry->reveal()
         );
     }
 
@@ -65,6 +78,7 @@ class ReferencesHandlerTest extends HandlerTestCase
         $action = $this->handle('references', [
             'source' => '<?php',
             'offset' => 1,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT,
         ]);
     }
 
@@ -80,6 +94,7 @@ class ReferencesHandlerTest extends HandlerTestCase
         $action = $this->handle('references', [
             'source' => '<?php new \stdClass();',
             'offset' => 15,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT,
         ]);
 
         $this->assertInstanceOf(EchoAction::class, $action);
@@ -108,6 +123,7 @@ class ReferencesHandlerTest extends HandlerTestCase
         $action = $this->handle('references', [
             'source' => '<?php new \stdClass();',
             'offset' => 15,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT,
         ]);
 
         $this->assertInstanceOf(StackAction::class, $action);
@@ -147,6 +163,7 @@ class ReferencesHandlerTest extends HandlerTestCase
         $action = $this->handle('references', [
             'source' => $std = '<?php $foo = new ' . __CLASS__ . '(); $foo->testMethodReturnNoneFound();',
             'offset' => 86,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT,
         ]);
 
         $this->assertInstanceOf(EchoAction::class, $action);
@@ -176,6 +193,7 @@ class ReferencesHandlerTest extends HandlerTestCase
         $action = $this->handle('references', [
             'source' => $std = '<?php $foo = new ' . __CLASS__ . '(); $foo->testMethodReferences();',
             'offset' => 86,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT,
         ]);
 
         $this->assertInstanceOf(StackAction::class, $action);
@@ -200,6 +218,26 @@ class ReferencesHandlerTest extends HandlerTestCase
                 ]
             ],
         ], $second->parameters());
+    }
+
+    public function testFilesystemChoice()
+    {
+        $this->filesystemRegistry->names()->willReturn([
+            'one' ,'two'
+        ]);
+
+        $action = $this->handle('references', [
+            'source' => '<?php new \stdClass();',
+            'offset' => 15,
+        ]);
+
+        $this->assertInstanceOf(InputCallbackAction::class, $action);
+        $this->assertEquals('references', $action->callbackAction()->name());
+        $inputs = $action->inputs();
+        $firstInput = array_shift($inputs);
+
+        $this->assertInstanceOf(ChoiceInput::class, $firstInput);
+        $this->assertEquals('filesystem', $firstInput->name());
     }
 }
 
