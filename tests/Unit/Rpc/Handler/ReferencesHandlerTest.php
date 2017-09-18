@@ -239,5 +239,22 @@ class ReferencesHandlerTest extends HandlerTestCase
         $this->assertInstanceOf(ChoiceInput::class, $firstInput);
         $this->assertEquals('filesystem', $firstInput->name());
     }
+
+    public function testRiskyChoice()
+    {
+        $action = $this->handle('references', [
+            'source' => '<?php $foobar->foobar()',
+            'offset' => 15,
+            'filesystem' => SourceCodeFilesystemExtension::FILESYSTEM_GIT
+        ]);
+
+        $this->assertInstanceOf(InputCallbackAction::class, $action);
+        $this->assertEquals('references', $action->callbackAction()->name());
+        $inputs = $action->inputs();
+        $firstInput = array_shift($inputs);
+
+        $this->assertInstanceOf(ChoiceInput::class, $firstInput);
+        $this->assertEquals('risky', $firstInput->name());
+    }
 }
 

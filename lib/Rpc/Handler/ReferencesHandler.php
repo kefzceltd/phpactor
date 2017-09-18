@@ -84,13 +84,33 @@ class ReferencesHandler implements Handler
         $offset = $this->reflector->reflectOffset(SourceCode::fromString($arguments['source']), Offset::fromInt($arguments['offset']));
         $symbolInformation = $offset->symbolInformation();
 
+        if (!in_array($symbolInformation->symbol()->symbolType(), [ Symbol::CLASS_, Symbol::METHOD ])) {
+            throw new \RuntimeException(sprintf(
+                'Unsupported symbol type at offset %s: "%s"',
+                $arguments['offset'],
+                $symbolInformation->symbol()->symbolType()
+            ));
+        }
+
         $missingInputs = [];
         if (null === $arguments['filesystem']) {
             $missingInputs[] = ChoiceInput::fromNameLabelChoicesAndDefault(
                 'filesystem',
-                'Filesystem:',
+                sprintf('Find references to "%s" in:', $symbolInformation->symbol()->name()),
                 array_combine($this->filesystemRegistry->names(), $this->filesystemRegistry->names()),
                 $this->defaultFilesystem
+            );
+        }
+
+        if (null === $arguments['risky'] && $symbolInformation->symbol()->symbolType() === Symbol::METHOD) {
+            $missingInputs[] = ChoiceInput::fromNameLabelChoicesAndDefault(
+                'risky',
+                'Include risky methods?:',
+                [
+                    'Yes' => true,
+                    'No' => false,
+                ],
+                false
             );
         }
 
@@ -104,7 +124,7 @@ class ReferencesHandler implements Handler
             );
         }
 
-        $references = $this->getReferences($arguments['filesystem'], $symbolInformation);
+        $references = $this->getReferences($arguments['filesystem'], $symbolInformation, $arguments['risky']);
 
         if (count($references) === 0) {
             return EchoAction::fromMessage('No references found');
@@ -115,12 +135,31 @@ class ReferencesHandler implements Handler
             return $count;
         }, 0);
 
+        $riskyCount = array_reduce($references, function ($count, $result) {
+            if (!isset($result['risky_references'])) {
+                return $count;
+            }
+
+            $count += count($result['risky_references']);
+            return $count;
+        }, 0);
+
+        $riskyMessage = '';
+        if ($symbolInformation->symbol()->symbolType() === Symbol::METHOD) {
+            $riskyMessage .= sprintf('in class "%s"', (string) $symbolInformation->classType());
+        }
+
+        if (null !== $arguments['risky']) {
+            $riskyMessage .= sprintf('(%s risky%s) ', $riskyCount, ($arguments['risky'] ? ', listing' : ', ignoring'));
+        }
+
         return StackAction::fromActions([
             EchoAction::fromMessage(sprintf(
-                'Found %s literal references to %s "%s" using FS "%s"',
+                'Found %s references to %s "%s" %susing FS "%s"',
                 $count,
                 $symbolInformation->symbol()->symbolType(),
                 $symbolInformation->symbol()->name(),
+                $riskyMessage,
                 $arguments['filesystem']
             )),
             FileReferencesAction::fromArray($references)
@@ -135,21 +174,31 @@ class ReferencesHandler implements Handler
         return $references['references'];
     }
 
-    private function methodReferences(string $filesystem, SymbolInformation $symbolInformation)
+    private function methodReferences(string $filesystem, SymbolInformation $symbolInformation, bool $risky = null)
     {
         $classType = (string) $symbolInformation->classType();
         $references = $this->classMethodReferences->findOrReplaceReferences($filesystem, $classType, $symbolInformation->symbol()->name());
 
-        return $references['references'];
+        if (false === $risky) {
+            return $references['references'];
+        }
+
+        return array_map(function (array $reference) {
+            foreach ($reference['risky_references'] as $riskyReference) {
+                $reference['references'][] = $riskyReference;
+            }
+
+            return $reference;
+        }, $references['references']);
     }
 
-    private function getReferences(string $filesystem, SymbolInformation $symbolInformation)
+    private function getReferences(string $filesystem, SymbolInformation $symbolInformation, bool $risky = null)
     {
         switch ($symbolInformation->symbol()->symbolType()) {
             case Symbol::CLASS_:
                 return $this->classReferences($filesystem, $symbolInformation);
             case Symbol::METHOD:
-                return $this->methodReferences($filesystem, $symbolInformation);
+                return $this->methodReferences($filesystem, $symbolInformation, $risky);
         }
 
         throw new \RuntimeException(sprintf(
