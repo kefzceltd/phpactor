@@ -29,6 +29,18 @@ class ClassCopyHandler extends AbstractHandler
         return self::NAME;
     }
 
+    public function configure(InputBuilder $builder)
+    {
+        $builder->requireArgument(
+            self::PARAM_DEST_PATH,
+            TextInput::fromNameLabelAndDefault(
+                self::PARAM_DEST_PATH,
+                'Copy to: ',
+                $arguments[self::PARAM_SOURCE_PATH]
+            )
+        );
+    }
+
     public function defaultParameters(): array
     {
         return [
@@ -39,16 +51,6 @@ class ClassCopyHandler extends AbstractHandler
 
     public function handle(array $arguments)
     {
-        $this->requireArgument(self::PARAM_DEST_PATH, TextInput::fromNameLabelAndDefault(
-            self::PARAM_DEST_PATH,
-            'Copy to: ',
-            $arguments[self::PARAM_SOURCE_PATH]
-        ));
-
-        if ($this->hasMissingArguments($arguments)) {
-            return $this->createInputCallback($arguments);
-        }
-
         $this->classCopy->copy(new NullLogger(), $arguments[self::PARAM_SOURCE_PATH], $arguments[self::PARAM_DEST_PATH]);
 
         return OpenFileResponse::fromPath($arguments[self::PARAM_DEST_PATH]);

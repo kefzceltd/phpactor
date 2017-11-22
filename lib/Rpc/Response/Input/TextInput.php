@@ -31,6 +31,11 @@ class TextInput implements Input
         return new self($name, $label, $default);
     }
 
+    public function fromName(string $name)
+    {
+        return new self($name, $name);
+    }
+
     public function type(): string
     {
         return 'text';
