@@ -21,6 +21,6 @@ class ClassSearchBench extends BaseBenchCase
 
     public function benchClassSearch()
     {
-        $this->runCommand([ 'command' => 'class:search', 'name' => 'Request' ]);
+        $this->runCommand('class:search Request');
     }
 }
